@@ -1,0 +1,19 @@
+stages:
+  stage0:
+    cmd: python convert_yaml_to_mcp_json.py --input_dir 
+      /home/sagemaker-user/FunctionWrapper/description_improvement/results/StableToolBench_D1
+      --output_dir /home/sagemaker-user/TOUCAN/mcp_servers
+    outs:
+    - ../mcp_servers
+  stage1-1:
+    cmd: python step1.1_gen_questions.py --sampling_strategy uniform 
+      --samples_per_server 1
+    deps:
+    - ../mcp_servers/
+  stage1-2:
+    cmd: bash step1.2_completion.sh 
+      ../data/ToolUse_smithery_10239_1tool_1762851360/ToolUse_s2q_smithery_10239_1tool_1762851360_prepared.jsonl
+      gpt-41-2025-04-14 openai
+  stage1-3:
+    cmd: python step1.3_process_completion.py --input_file 
+      ../data/ToolUse_smithery_10239_1tool_1762851360/ToolUse_s2q_smithery_10239_1tool_1762851360_gpt-41-2025-04-14_results.jsonl
