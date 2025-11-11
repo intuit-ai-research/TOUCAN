@@ -1,4 +1,4 @@
-import torch
+# import torch
 import os
 import sys
 import argparse
@@ -10,9 +10,11 @@ import concurrent.futures
 from time import sleep, time
 from tqdm import tqdm
 from utils import load_dataset_from_file, save_dataset, make_api_request_with_retry, get_model_short_name, safe_save_checkpoint, get_model_abbreviation
-from vllm import LLM, SamplingParams
-from transformers import AutoTokenizer, AutoModelForCausalLM
+# from vllm import LLM, SamplingParams
+# from transformers import AutoTokenizer, AutoModelForCausalLM
 from openai import OpenAI
+
+from genos import INTUIT_AUTHN_HEADERS, BASE_URL_PER_ENV
 
 ################
 # Configurations
@@ -229,7 +231,8 @@ def process_batch_openai(batch, client):
                 messages=message,
                 temperature=args.temperature,
                 max_tokens=args.max_tokens,
-                top_p=args.top_p        
+                top_p=args.top_p,
+                extra_headers=INTUIT_AUTHN_HEADERS,
             )
             response = completion.choices[0].message.content
             item['messages'] = message + [
@@ -417,10 +420,11 @@ def main():
         tokenizer = AutoTokenizer.from_pretrained(args.model_path)
     elif args.engine == "openai":
         print("Start OpenAI GPT engine...")
-        openai_api_key = args.openai_api_key if args.openai_api_key else os.getenv("OPENAI_API_KEY")
-        if not openai_api_key:
-            raise ValueError("OpenAI API Key not provided. Please set OPENAI_API_KEY environment variable or provide --openai_api_key argument.")
-        llm = OpenAI(api_key=openai_api_key)
+        # openai_api_key = args.openai_api_key if args.openai_api_key else os.getenv("OPENAI_API_KEY")
+        # if not openai_api_key:
+        #     raise ValueError("OpenAI API Key not provided. Please set OPENAI_API_KEY environment variable or provide --openai_api_key argument.")
+        llm = OpenAI(base_url=BASE_URL_PER_ENV["E2E"].format(intuit_genos_model_id=args.model_path), api_key="xxx")
+        llm.extra_headers = INTUIT_AUTHN_HEADERS
         params = None
         tokenizer = None
     elif args.engine == "openrouter_api":
