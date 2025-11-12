@@ -184,8 +184,7 @@ def build_relevant_apis(item: Dict[str, Any]) -> List[Tuple[str, str]]:
         with open(server["original_file"], "r") as f:
             yaml_file = yaml.safe_load(f)
         api_name = list(yaml_file["mcp_servers"].keys())[0]
-        remote_server_response = server["remote_server_response"]
-        tool_names = [tool["name"] for tool in remote_server_response["tools"]]
+        tool_names = item['metadata']['target_tools'].split(", ")
         relevant_apis.extend([[api_name, tool_name] for tool_name in tool_names])
     return relevant_apis
 
