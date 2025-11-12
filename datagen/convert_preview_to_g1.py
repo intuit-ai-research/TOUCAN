@@ -3,6 +3,7 @@ import argparse
 import json
 import os
 import re
+from collections import defaultdict
 from typing import Any, Dict, List, Tuple, Optional
 import yaml
 from tqdm import tqdm
@@ -150,7 +151,7 @@ def convert_preview_to_g1(preview_file: str, tools_root: str, output_dir: str) -
     specs = load_tool_specs_by_category(tools_root)
     print(f"Loaded tool specs")
 
-    results: Dict[Tuple[str, str], Dict[str, Any]] = {}
+    results: Dict[Tuple[str, str], List[Dict[str, Any]]] = defaultdict(list)
     for idx, item in tqdm(enumerate(preview), total=len(preview), desc="Converting preview to G1"):
         if not isinstance(item, dict):
             continue
@@ -167,13 +168,13 @@ def convert_preview_to_g1(preview_file: str, tools_root: str, output_dir: str) -
         }
         # assume both all apis are from the same api provider
         assert len(set([(api["category_name"], api["tool_name"]) for api in api_list])) == 1, "All apis must be from the same api provider"
-        results[(category_name, api_list[0]["tool_name"])] = g1_entry
+        results[(category_name, api_list[0]["tool_name"])].append(g1_entry)
 
     # group the results by api provider
-    for (category_name, tool_name), g1_entry in results.items():
+    for (category_name, tool_name), g1_entries in results.items():
         os.makedirs(output_dir, exist_ok=True)
         with open(os.path.join(output_dir, f"{standardize(category_name)}_{standardize(tool_name)}.json"), "w") as out:
-            json.dump(g1_entry, out, indent=4, ensure_ascii=False)
+            json.dump(g1_entries, out, indent=4, ensure_ascii=False)
 
 
 def build_relevant_apis(item: Dict[str, Any]) -> List[Tuple[str, str]]:    
