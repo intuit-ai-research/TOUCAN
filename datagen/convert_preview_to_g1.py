@@ -140,7 +140,7 @@ def extract_tool_name_from_item(item: Dict[str, Any]) -> Optional[str]:
     return None
 
 
-def convert_preview_to_g1(preview_file: str, tools_root: str, output_path: str) -> None:
+def convert_preview_to_g1(preview_file: str, tools_root: str, output_dir: str) -> None:
     preview = []
     with open(preview_file, "r") as f:
         for lines in f:
@@ -165,8 +165,11 @@ def convert_preview_to_g1(preview_file: str, tools_root: str, output_path: str) 
         }
         results.append(g1_entry)
 
-    with open(output_path, "w") as out:
-        json.dump(results, out, indent=4, ensure_ascii=False)
+    # split the results to 200 queries per file
+    for i in range(0, len(results), 200):
+        chunk = results[i:i+200]
+        with open(os.path.join(output_dir, f"generated_{i//200+1}.json"), "w") as out:
+            json.dump(chunk, out, indent=4, ensure_ascii=False)
 
 
 def build_relevant_apis(item: Dict[str, Any]) -> List[Tuple[str, str]]:    
@@ -187,14 +190,14 @@ def get_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(description="Convert preview ToolUse JSON into G1_category-like JSON.")
     p.add_argument("--preview_file", required=True, help="Path to preview JSON (e.g., preview_ToolUse_..._sanitized.json)")
     p.add_argument("--tools_root_dir", required=True, help="Root directory containing category subfolders with tool JSON specs")
-    p.add_argument("--output", required=True, help="Path to write the G1_category-like JSON")
+    p.add_argument("--output_dir", required=True, help="Path to write the G1_category-like JSON")
     return p.parse_args()
 
 
 def main() -> None:
     args = get_args()
-    convert_preview_to_g1(args.preview_file, args.tools_root_dir, args.output)
-    print(f"Wrote: {args.output}")
+    convert_preview_to_g1(args.preview_file, args.tools_root_dir, args.output_dir)
+    print(f"Wrote: {args.output_dir}")
 
 
 if __name__ == "__main__":
