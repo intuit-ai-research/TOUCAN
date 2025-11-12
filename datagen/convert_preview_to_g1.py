@@ -5,7 +5,7 @@ import os
 import re
 from typing import Any, Dict, List, Tuple, Optional
 import yaml
-
+from tqdm import tqdm
 
 def standardize(name: str) -> str:
     if name is None:
@@ -146,10 +146,12 @@ def convert_preview_to_g1(preview_file: str, tools_root: str, output_dir: str) -
         for lines in f:
             item = json.loads(lines)
             preview.append(item)
+    print(f"Loaded {len(preview)} items")
     specs = load_tool_specs_by_category(tools_root)
+    print(f"Loaded tool specs")
 
-    results: List[Dict[str, Any]] = []
-    for idx, item in enumerate(preview):
+    results: Dict[Tuple[str, str], Dict[str, Any]] = {}
+    for idx, item in tqdm(enumerate(preview), total=len(preview), desc="Converting preview to G1"):
         if not isinstance(item, dict):
             continue
         question = item["metadata"]["question"]
@@ -163,14 +165,15 @@ def convert_preview_to_g1(preview_file: str, tools_root: str, output_dir: str) -
             "relevant APIs": relevant_apis,
             "query_id": idx,
         }
-        results.append(g1_entry)
+        # assume both all apis are from the same api provider
+        assert len(set([(api["category_name"], api["tool_name"]) for api in api_list])) == 1, "All apis must be from the same api provider"
+        results[(category_name, api_list[0]["tool_name"])] = g1_entry
 
-    # split the results to 200 queries per file
-    for i in range(0, len(results), 200):
-        chunk = results[i:i+200]
+    # group the results by api provider
+    for (category_name, tool_name), g1_entry in results.items():
         os.makedirs(output_dir, exist_ok=True)
-        with open(os.path.join(output_dir, f"generated_{i//200+1}.json"), "w") as out:
-            json.dump(chunk, out, indent=4, ensure_ascii=False)
+        with open(os.path.join(output_dir, f"{standardize(category_name)}_{standardize(tool_name)}.json"), "w") as out:
+            json.dump(g1_entry, out, indent=4, ensure_ascii=False)
 
 
 def build_relevant_apis(item: Dict[str, Any]) -> List[Tuple[str, str]]:    
