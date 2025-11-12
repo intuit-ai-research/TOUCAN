@@ -12,11 +12,6 @@ stages:
   stage1-2:
     cmd: bash step1.2_completion.sh ../data/ToolUse_smithery_49350_2tool_1762908421/ToolUse_s2q_smithery_49350_2tool_1762908421_prepared.jsonl gpt-41-2025-04-14 openai
   stage1-3:
-    cmd: python step1.3_process_completion.py --input_file 
-      ../data/ToolUse_smithery_10239_1tool_1762851360/ToolUse_s2q_smithery_10239_1tool_1762851360_gpt-41-2025-04-14_results.jsonl
+    cmd: python step1.3_process_completion.py --input_file ../data/ToolUse_smithery_49350_2tool_1762908421/split/all_results.jsonl
   convert2query:
-    cmd: python convert_preview_to_g1.py --preview_file 
-      ../data/ToolUse_smithery_10239_1tool_1762851360/processed/ToolUse_s2q_smithery_10239_1tool_1762851360_gpt-41-2025-04-14_3sanitized.jsonl
-      --tools_root_dir 
-      /home/sagemaker-user/FunctionWrapper/StableToolBench/data/toolenv/tools 
-      --output ../data/generated.json
+    cmd: python  convert_preview_to_g1.py --preview_file ../data/ToolUse_smithery_49350_2tool_1762908421/split/processed/all_4prepared.jsonl --tools_root_dir /home/sagemaker-user/FunctionWrapper/StableToolBench/data/toolenv/tools --output_dir ../data/ToolUse_smithery_49350_2tool_1762908421/queries/

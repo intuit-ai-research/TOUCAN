@@ -152,7 +152,7 @@ def convert_preview_to_g1(preview_file: str, tools_root: str, output_dir: str) -
     for idx, item in enumerate(preview):
         if not isinstance(item, dict):
             continue
-        question = item["question"]
+        question = item["metadata"]["question"]
         category_name = extract_category_from_item(item)
 
         api_list = build_api_list(item, specs)
@@ -168,6 +168,7 @@ def convert_preview_to_g1(preview_file: str, tools_root: str, output_dir: str) -
     # split the results to 200 queries per file
     for i in range(0, len(results), 200):
         chunk = results[i:i+200]
+        os.makedirs(output_dir, exist_ok=True)
         with open(os.path.join(output_dir, f"generated_{i//200+1}.json"), "w") as out:
             json.dump(chunk, out, indent=4, ensure_ascii=False)
 
