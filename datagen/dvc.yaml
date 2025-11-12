@@ -17,3 +17,9 @@ stages:
   stage1-3:
     cmd: python step1.3_process_completion.py --input_file 
       ../data/ToolUse_smithery_10239_1tool_1762851360/ToolUse_s2q_smithery_10239_1tool_1762851360_gpt-41-2025-04-14_results.jsonl
+  convert2query:
+    cmd: python convert_preview_to_g1.py --preview_file 
+      ..//data/ToolUse_smithery_10239_1tool_1762851360/processed/ToolUse_s2q_smithery_10239_1tool_1762851360_gpt-41-2025-04-14_3sanitized.jsonl
+      --tools_root_dir 
+      /home/sagemaker-user/FunctionWrapper/StableToolBench/data/toolenv/tools 
+      --output ../data/generated.json
