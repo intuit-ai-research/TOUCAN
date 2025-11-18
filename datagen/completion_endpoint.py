@@ -1,4 +1,4 @@
-import torch
+# import torch
 import os
 import sys
 import argparse
@@ -9,10 +9,18 @@ import requests
 import concurrent.futures
 from time import sleep, time
 from tqdm import tqdm
+from tenacity import (
+    retry,
+    retry_if_exception_type,
+    wait_random_exponential,
+    stop_after_attempt,
+)
 from utils import load_dataset_from_file, save_dataset, make_api_request_with_retry, get_model_short_name, safe_save_checkpoint, get_model_abbreviation
-from vllm import LLM, SamplingParams
-from transformers import AutoTokenizer, AutoModelForCausalLM
-from openai import OpenAI
+# from vllm import LLM, SamplingParams
+# from transformers import AutoTokenizer, AutoModelForCausalLM
+from openai import OpenAI, RateLimitError
+
+from genos import INTUIT_AUTHN_HEADERS, BASE_URL_PER_ENV
 
 ################
 # Configurations
@@ -47,6 +55,9 @@ def get_args():
     parser.add_argument("--repetition_penalty", type=float, default=1.0)
     parser.add_argument("--num_trials", type=int, default=1)
     parser.add_argument("--step", type=str, default="unknown", help="Processing step identifier.")
+
+    # Multi-threading
+    parser.add_argument("--num_threads", type=int, default=4, help="Number of threads to use for parallel processing")
 
     return parser.parse_args()
 
@@ -219,34 +230,63 @@ def process_batch_local(batch, llm, params, tokenizer=None):
             ]
     return batch
 
+@retry(wait=wait_random_exponential(min=6, max=120),retry=retry_if_exception_type(RateLimitError),stop=stop_after_attempt(4))
+def openai_completion(client, **kwargs):
+    return client.chat.completions.create(**kwargs)
+
+def process_helper(item, client):
+    item = copy.deepcopy(item)
+    message = item["messages"]
+    try:
+        completion = openai_completion(client,
+            model=args.model_path,
+            messages=message,
+            temperature=args.temperature,
+            max_tokens=args.max_tokens,
+            top_p=args.top_p,
+            extra_headers=INTUIT_AUTHN_HEADERS,
+        )
+        response = completion.choices[0].message.content
+        item['messages'] = message + [
+            {
+                "role": "assistant",
+                "content": response
+            }
+        ]
+    except Exception as e:
+        print(f"Failed to process item: {item} with error: {str(e)}")
+        item['messages'] = message + [
+            {
+                "role": "assistant",
+                "content": ""
+            }
+        ]
+    return item
+
+
 # Process a batch of data using OpenAI GPT API
-def process_batch_openai(batch, client):
-    for item in batch:
-        message = item["messages"]
-        try:
-            completion = client.chat.completions.create(
-                model=args.model_path,
-                messages=message,
-                temperature=args.temperature,
-                max_tokens=args.max_tokens,
-                top_p=args.top_p        
-            )
-            response = completion.choices[0].message.content
-            item['messages'] = message + [
-                {
-                    "role": "assistant",
-                    "content": response
-                }
-            ]
-        except Exception as e:
-            print(f"Failed to process item: {item} with error: {str(e)}")
-            item['messages'] = message + [
-                {
-                    "role": "assistant",
-                    "content": ""
-                }
-            ]
-    return batch
+def process_batch_openai(batch, client, num_threads):
+    # Use ThreadPoolExecutor for parallel processing (from gorilla)
+    batch_results = []
+    futures = []
+    with concurrent.futures.ThreadPoolExecutor(max_workers=num_threads) as executor:
+        with tqdm(total=len(batch), desc=f"Processing examples") as pbar:
+            
+            # Submit all tasks
+            for item in batch:
+                future = executor.submit(
+                    process_helper,
+                    item,
+                    client
+                )
+                futures.append(future)
+            
+            # Collect results in order
+            for future in concurrent.futures.as_completed(futures):
+                result_entry = future.result()
+                batch_results.append(result_entry)
+                pbar.update(1)
+    return batch_results
 
 # Function to add generation config to metadata
 def add_generation_config_to_metadata(dataset, model_abbreviation, generation_params):
@@ -269,7 +309,7 @@ def add_generation_config_to_metadata(dataset, model_abbreviation, generation_pa
     return dataset
 
 # Generate outputs, update dataset in batches, and overwrite checkpoint
-def generate_and_update(dataset, checkpoint_file, llm=None, params=None, tokenizer=None):
+def generate_and_update(dataset, checkpoint_file, llm=None, params=None, tokenizer=None, num_threads=1):
     processed_dataset = copy.deepcopy(dataset)
 
     # Prepare generation parameters for metadata
@@ -313,7 +353,7 @@ def generate_and_update(dataset, checkpoint_file, llm=None, params=None, tokeniz
         if args.engine == "together_api" or args.engine == "vllm_api":
             batch = process_batch_api(batch)
         elif args.engine == "openai" or args.engine == "openrouter_api":
-            batch = process_batch_openai(batch, llm)
+            batch = process_batch_openai(batch, llm, args.num_threads)
         else:
             batch = process_batch_local(batch, llm, params, tokenizer)
         
@@ -417,10 +457,11 @@ def main():
         tokenizer = AutoTokenizer.from_pretrained(args.model_path)
     elif args.engine == "openai":
         print("Start OpenAI GPT engine...")
-        openai_api_key = args.openai_api_key if args.openai_api_key else os.getenv("OPENAI_API_KEY")
-        if not openai_api_key:
-            raise ValueError("OpenAI API Key not provided. Please set OPENAI_API_KEY environment variable or provide --openai_api_key argument.")
-        llm = OpenAI(api_key=openai_api_key)
+        # openai_api_key = args.openai_api_key if args.openai_api_key else os.getenv("OPENAI_API_KEY")
+        # if not openai_api_key:
+        #     raise ValueError("OpenAI API Key not provided. Please set OPENAI_API_KEY environment variable or provide --openai_api_key argument.")
+        llm = OpenAI(base_url=BASE_URL_PER_ENV["E2E"].format(intuit_genos_model_id=args.model_path), api_key="xxx")
+        llm.extra_headers = INTUIT_AUTHN_HEADERS
         params = None
         tokenizer = None
     elif args.engine == "openrouter_api":
@@ -435,7 +476,7 @@ def main():
         raise ValueError("Invalid engine type.")
 
     if args.num_trials == 1:
-        updated_dataset = generate_and_update(dataset, checkpoint_file, llm, params, tokenizer=tokenizer)
+        updated_dataset = generate_and_update(dataset, checkpoint_file, llm, params, tokenizer=tokenizer, num_threads=args.num_threads)
         save_dataset(updated_dataset, saved_file, convert_to_jsonl=True)
 
         # Optionally remove the checkpoint file after completion

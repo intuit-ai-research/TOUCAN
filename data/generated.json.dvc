@@ -1,0 +1,5 @@
+outs:
+- md5: 9524fd5d63c0327b1a18d6b57e52e4da
+  size: 35108967
+  hash: md5
+  path: generated.json
