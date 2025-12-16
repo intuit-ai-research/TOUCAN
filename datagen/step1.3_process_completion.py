@@ -332,18 +332,22 @@ def extract_xml_tools(text, metadata=None):
     # Strategy 2: Plain text parsing - must be single_server mode
     elif mode == "single_server":
         
-        # Clean up the content first
-        content = target_tools_content.strip()
+        # # Clean up the content first
+        # content = target_tools_content.strip()
         
-        # Remove any remaining XML-like tags that might be malformed
-        content = re.sub(r'<[^>]*>', '', content)
+        # # Remove any remaining XML-like tags that might be malformed
+        # content = re.sub(r'<[^>]*>', '', content)
         
-        # Try comma separation first
-        if ',' in content:
-            tools = [tool.strip() for tool in content.split(',') if tool.strip()]
-        else:
-            # Try newline/whitespace separation
-            tools = [tool.strip() for tool in re.split(r'[\n\r\s]+', content) if tool.strip()]    
+        # # Try comma separation first
+        # if ',' in content:
+        #     tools = [tool.strip() for tool in content.split(',') if tool.strip()]
+        # else:
+        #     # Try newline/whitespace separation
+        #     tools = [tool.strip() for tool in re.split(r'[\n\r\s]+', content) if tool.strip()]    
+
+        tool_pattern = r'<tool>(.*?)</tool>'
+        tool_matches = re.findall(tool_pattern, target_tools_content, re.DOTALL)
+        tools = [tool.strip() for tool in tool_matches]
         # Filter out empty strings
         tools = [tool for tool in tools if tool]
 
