@@ -25,7 +25,7 @@ Stage1-1 (question generation):
   --timestamp INT             Timestamp/seed for stage1-1 (default: now)
 
 Stage1-2 (completion):
-  --model_path STR            Passed to step1.2_completion.sh (default: gpt-41-2025-04-14)
+  --model_path STR            Passed to step1.2_completion.sh (default: gpt-41-2025-04-14-oai)
   --engine STR                vllm_api|vllm|hf|together_api|openai|openrouter_api (default: openai)
   --start_vllm_service BOOL   true|false (default: false)
 
