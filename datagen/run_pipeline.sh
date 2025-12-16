@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+ORIG_PWD="$(pwd)"
+ORIG_ARGS=("$@")
+
 usage() {
   cat <<'EOF'
 Usage:
@@ -11,6 +14,7 @@ Required:
 
 Stage0:
   --mcp_servers_dir DIR       Where to write MCP server JSONs (default: ../mcp_servers)
+  --cache_dir DIR             Cache dir for convert_yaml_to_mcp_json.py (default: /home/sagemaker-user/FunctionWrapper/StableToolBench/server/tool_response_cache)
 
 Stage1-1 (question generation):
   --num_tools N               (default: 2)
@@ -21,9 +25,9 @@ Stage1-1 (question generation):
   --timestamp INT             Timestamp/seed for stage1-1 (default: now)
 
 Stage1-2 (completion):
-  --model_path STR            Passed to step1.2_completion.sh (default: Qwen/Qwen3-30B-A3B-Instruct-2507)
-  --engine STR                vllm_api|vllm|hf|together_api|openai|openrouter_api (default: vllm_api)
-  --start_vllm_service BOOL   true|false (default: true)
+  --model_path STR            Passed to step1.2_completion.sh (default: gpt-41-2025-04-14)
+  --engine STR                vllm_api|vllm|hf|together_api|openai|openrouter_api (default: openai)
+  --start_vllm_service BOOL   true|false (default: false)
 
 Convert2Query:
   --tools_root_dir DIR        Tool specs root (default: /home/sagemaker-user/FunctionWrapper/StableToolBench/data/toolenv/tools)
@@ -125,6 +129,16 @@ PY
 )"
 
 echo "==> Target folder determined from stage1-1 stdout: $target_dir_abs"
+
+echo "==> Writing reproducibility command: $target_dir_abs/command.txt"
+script_abs="$SCRIPT_DIR/$(basename "${BASH_SOURCE[0]}")"
+{
+  echo "# Reproducibility command"
+  echo "# Generated: $(date -Is)"
+  echo "# Original working dir: $ORIG_PWD"
+  printf "%q " "$script_abs" "${ORIG_ARGS[@]}"
+  echo
+} > "$target_dir_abs/command.txt"
 
 echo "==> [1-2] Stage1-2: find *_prepared.jsonl in target folder and run completion"
 mapfile -t prepared_files < <(find "$target_dir_abs" -maxdepth 1 -type f -name "*_prepared.jsonl" | sort)
