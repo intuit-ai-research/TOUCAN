@@ -1,0 +1,6 @@
+outs:
+- md5: 096e8c92fde2da05bdadfe4679ec0d43.dir
+  size: 22734088
+  nfiles: 108
+  hash: md5
+  path: split2b
