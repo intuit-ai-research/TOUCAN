@@ -4,6 +4,25 @@ set -euo pipefail
 ORIG_PWD="$(pwd)"
 ORIG_ARGS=("$@")
 
+print_cmd() {
+  printf "+ "
+  printf "%q " "$@"
+  printf "\n"
+}
+
+run_cmd() {
+  print_cmd "$@"
+  "$@"
+}
+
+run_pipeline_cmd() {
+  # Print a pipeline command as a single, copy/paste-able line and then execute it.
+  # Usage: run_pipeline_cmd "<command string>"
+  local cmd_str="${1:?cmd string required}"
+  printf "+ %s\n" "$cmd_str"
+  bash -lc "$cmd_str"
+}
+
 usage() {
   cat <<'EOF'
 Usage:
@@ -51,7 +70,7 @@ MODE="single_server"
 OUTPUT_FOLDER="../data"
 TIMESTAMP="$(date +%s)"
 
-MODEL_PATH="gpt-41-2025-04-14"
+MODEL_PATH="gpt-41-2025-04-14-oai"
 ENGINE="openai"
 START_VLLM_SERVICE="false"
 
@@ -96,25 +115,25 @@ PY
 )"
 
 echo "==> [0] Cleaning MCP servers dir: $MCP_SERVERS_DIR_ABS"
-rm -rf "$MCP_SERVERS_DIR_ABS"
-mkdir -p "$MCP_SERVERS_DIR_ABS"
+run_cmd rm -rf "$MCP_SERVERS_DIR_ABS"
+run_cmd mkdir -p "$MCP_SERVERS_DIR_ABS"
 
 echo "==> [0] Stage0: convert_yaml_to_mcp_json.py"
-python convert_yaml_to_mcp_json.py --input_dir "$INPUT_DIR" --output_dir "$MCP_SERVERS_DIR_ABS" --cache_dir "$CACHE_DIR"
+run_cmd python convert_yaml_to_mcp_json.py --input_dir "$INPUT_DIR" --output_dir "$MCP_SERVERS_DIR_ABS" --cache_dir "$CACHE_DIR"
 
 echo "==> [1-1] Stage1-1: step1.1_gen_questions.py"
 stage1_1_log="$(mktemp -t stage1_1.XXXXXX.log)"
-python step1.1_gen_questions.py \
-  --num_tools "$NUM_TOOLS" \
-  --sampling_strategy "$SAMPLING_STRATEGY" \
-  --samples_per_server "$SAMPLES_PER_SERVER" \
-  --mode "$MODE" \
-  --output_folder "$OUTPUT_FOLDER" \
-  --timestamp "$TIMESTAMP" \
-  | tee "$stage1_1_log"
+run_pipeline_cmd "python step1.1_gen_questions.py \
+  --num_tools $(printf %q "$NUM_TOOLS") \
+  --sampling_strategy $(printf %q "$SAMPLING_STRATEGY") \
+  --samples_per_server $(printf %q "$SAMPLES_PER_SERVER") \
+  --mode $(printf %q "$MODE") \
+  --output_folder $(printf %q "$OUTPUT_FOLDER") \
+  --timestamp $(printf %q "$TIMESTAMP") \
+  | tee $(printf %q "$stage1_1_log")"
 
 last_line="$(tail -n 1 "$stage1_1_log" || true)"
-rm -f "$stage1_1_log"
+run_cmd rm -f "$stage1_1_log"
 
 [[ "$last_line" == Output\ directory:* ]] || die "Stage1-1 did not end with expected line. Got: $last_line"
 prepared_from_stdout="${last_line#Output directory: }"
@@ -146,7 +165,7 @@ mapfile -t prepared_files < <(find "$target_dir_abs" -maxdepth 1 -type f -name "
 
 for pf in "${prepared_files[@]}"; do
   echo "----> Completing: $pf"
-  bash step1.2_completion.sh "$pf" "$MODEL_PATH" "$ENGINE" "1.2" "$START_VLLM_SERVICE"
+  run_cmd bash step1.2_completion.sh "$pf" "$MODEL_PATH" "$ENGINE" "1.2" "$START_VLLM_SERVICE"
 done
 
 echo "==> [1-3] Stage1-3: find *_results.jsonl in target folder and process"
@@ -155,7 +174,7 @@ mapfile -t results_files < <(find "$target_dir_abs" -maxdepth 1 -type f -name "*
 
 for rf in "${results_files[@]}"; do
   echo "----> Processing: $rf"
-  python step1.3_process_completion.py --input_file "$rf"
+  run_cmd python step1.3_process_completion.py --input_file "$rf"
 done
 
 echo "==> [convert2query] Find *_4prepared.jsonl under processed/ and convert to queries/"
@@ -171,9 +190,9 @@ fi
 preview_file="$(ls -t "${preview_files[@]}" | head -n 1)"
 
 queries_dir="$target_dir_abs/queries"
-mkdir -p "$queries_dir"
+run_cmd mkdir -p "$queries_dir"
 
-python convert_preview_to_g1.py \
+run_cmd python convert_preview_to_g1.py \
   --preview_file "$preview_file" \
   --tools_root_dir "$TOOLS_ROOT_DIR" \
   --output_dir "$queries_dir"
@@ -184,6 +203,7 @@ jsons=( "$queries_dir"/*.json )
 shopt -u nullglob
 [[ ${#jsons[@]} -gt 0 ]] || die "No .json files found in $queries_dir to combine"
 
+print_cmd jq -s 'add' "$queries_dir"/*.json ">" "$target_dir_abs/combined_queries.json"
 jq -s 'add' "$queries_dir"/*.json > "$target_dir_abs/combined_queries.json"
 echo "Wrote combined queries: $target_dir_abs/combined_queries.json"
 
