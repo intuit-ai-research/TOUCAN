@@ -4,10 +4,19 @@ set -euo pipefail
 ORIG_PWD="$(pwd)"
 ORIG_ARGS=("$@")
 
+EXEC_LOG=""
+
 print_cmd() {
-  printf "+ "
-  printf "%q " "$@"
-  printf "\n"
+  local line="+"
+  local quoted=""
+  for arg in "$@"; do
+    printf -v quoted "%q" "$arg"
+    line+=" $quoted"
+  done
+  echo "$line"
+  if [[ -n "${EXEC_LOG:-}" ]]; then
+    echo "$line" >> "$EXEC_LOG"
+  fi
 }
 
 run_cmd() {
@@ -19,7 +28,11 @@ run_pipeline_cmd() {
   # Print a pipeline command as a single, copy/paste-able line and then execute it.
   # Usage: run_pipeline_cmd "<command string>"
   local cmd_str="${1:?cmd string required}"
-  printf "+ %s\n" "$cmd_str"
+  local line="+ $cmd_str"
+  echo "$line"
+  if [[ -n "${EXEC_LOG:-}" ]]; then
+    echo "$line" >> "$EXEC_LOG"
+  fi
   bash -lc "$cmd_str"
 }
 
@@ -149,6 +162,14 @@ PY
 
 echo "==> Target folder determined from stage1-1 stdout: $target_dir_abs"
 
+EXEC_LOG="$target_dir_abs/execution_log.txt"
+{
+  echo "# Execution log (commands printed by run_pipeline.sh after target dir was determined)"
+  echo "# Generated: $(date -Is)"
+  echo "# Target dir: $target_dir_abs"
+  echo
+} >> "$EXEC_LOG"
+
 echo "==> Writing reproducibility command: $target_dir_abs/command.txt"
 script_abs="$SCRIPT_DIR/$(basename "${BASH_SOURCE[0]}")"
 {
@@ -181,11 +202,11 @@ echo "==> [convert2query] Find *_4prepared.jsonl under processed/ and convert to
 processed_dir="$target_dir_abs/processed"
 [[ -d "$processed_dir" ]] || die "Missing processed dir: $processed_dir (did stage1-3 run successfully?)"
 
-mapfile -t preview_files < <(find "$processed_dir" -maxdepth 1 -type f -name "*_4prepared.jsonl" | sort)
-[[ ${#preview_files[@]} -gt 0 ]] || die "No *_4prepared.jsonl found in $processed_dir"
+mapfile -t preview_files < <(find "$processed_dir" -maxdepth 1 -type f -name "ToolUse_*_4prepared.jsonl" | sort)
+[[ ${#preview_files[@]} -gt 0 ]] || die "No ToolUse_*_4prepared.jsonl found in $processed_dir"
 
 if [[ ${#preview_files[@]} -gt 1 ]]; then
-  echo "WARNING: multiple *_4prepared.jsonl found; using the newest by mtime." >&2
+  echo "WARNING: multiple ToolUse_*_4prepared.jsonl found; using the newest by mtime." >&2
 fi
 preview_file="$(ls -t "${preview_files[@]}" | head -n 1)"
 
