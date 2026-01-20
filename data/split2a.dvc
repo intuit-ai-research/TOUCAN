@@ -1,0 +1,6 @@
+outs:
+- md5: 2e3843a3565cc63625d6accf80ebf842.dir
+  size: 18370421
+  nfiles: 805
+  hash: md5
+  path: split2a
