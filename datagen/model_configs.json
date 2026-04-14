@@ -402,5 +402,9 @@
   "mistralai/devstral-small": {
     "model_name": "mistralai/devstral-small",
     "abbreviation": "devss"
+  },
+  "gpt-4.1-2025-04-14": {
+    "model_name": "gpt-4.1-2025-04-14",
+    "abbreviation": "gpt41-20250414"
   }
 }

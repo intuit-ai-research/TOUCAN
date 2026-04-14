@@ -43,10 +43,11 @@ Usage:
 
 Required:
   --input_dir DIR             Input dir for stage0 (same meaning as in dvc.yaml stage0)
+  --tools_root_dir DIR        Directory path to tools API definitions
 
 Stage0:
   --mcp_servers_dir DIR       Where to write MCP server JSONs (default: ../mcp_servers)
-  --cache_dir DIR             Cache dir for convert_yaml_to_mcp_json.py (default: /home/sagemaker-user/FunctionWrapper/StableToolBench/server/tool_response_cache)
+  --cache_dir DIR             Cache dir for convert_yaml_to_mcp_json.py (default: ./tool_response_cache)
 
 Stage1-1 (question generation):
   --num_tools N               (default: 2)
@@ -57,12 +58,12 @@ Stage1-1 (question generation):
   --timestamp INT             Timestamp/seed for stage1-1 (default: now)
 
 Stage1-2 (completion):
-  --model_path STR            Passed to step1.2_completion.sh (default: gpt-41-2025-04-14-oai)
+  --model_name STR            Model name passed to completion scripts (default: gpt-4.1-2025-04-14)
   --engine STR                vllm_api|vllm|hf|together_api|openai|openrouter_api (default: openai)
   --start_vllm_service BOOL   true|false (default: false)
 
-Convert2Query:
-  --tools_root_dir DIR        Tool specs root (default: /home/sagemaker-user/FunctionWrapper/StableToolBench/data/toolenv/tools)
+OpenAI:
+  --openai_api_key STR        API key for OpenAI models (or set OPENAI_API_KEY env var)
 
 Notes:
   - Always begins by removing ../mcp_servers (or --mcp_servers_dir).
@@ -83,12 +84,14 @@ MODE="single_server"
 OUTPUT_FOLDER="../data"
 TIMESTAMP="$(date +%s)"
 
-MODEL_PATH="gpt-41-2025-04-14-oai"
 ENGINE="openai"
 START_VLLM_SERVICE="false"
 
-TOOLS_ROOT_DIR="/home/sagemaker-user/FunctionWrapper/StableToolBench/data/toolenv/tools"
-CACHE_DIR="/home/sagemaker-user/FunctionWrapper/StableToolBench/server/tool_response_cache"
+OPENAI_API_KEY_ARG=""
+MODEL_NAME="gpt-4.1-2025-04-14"
+
+TOOLS_ROOT_DIR=""
+CACHE_DIR="./tool_response_cache"
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -102,9 +105,11 @@ while [[ $# -gt 0 ]]; do
     --output_folder) OUTPUT_FOLDER="${2:-}"; shift 2 ;;
     --timestamp) TIMESTAMP="${2:-}"; shift 2 ;;
 
-    --model_path) MODEL_PATH="${2:-}"; shift 2 ;;
     --engine) ENGINE="${2:-}"; shift 2 ;;
     --start_vllm_service) START_VLLM_SERVICE="${2:-}"; shift 2 ;;
+
+    --openai_api_key) OPENAI_API_KEY_ARG="${2:-}"; shift 2 ;;
+    --model_name) MODEL_NAME="${2:-}"; shift 2 ;;
 
     --tools_root_dir) TOOLS_ROOT_DIR="${2:-}"; shift 2 ;;
     --cache_dir) CACHE_DIR="${2:-}"; shift 2 ;;
@@ -114,6 +119,15 @@ while [[ $# -gt 0 ]]; do
 done
 
 [[ -n "$INPUT_DIR" ]] || { usage; die "--input_dir is required"; }
+[[ -n "$TOOLS_ROOT_DIR" ]] || { usage; die "--tools_root_dir is required"; }
+
+# Resolve OpenAI API key: CLI arg takes precedence over env var
+if [[ -n "$OPENAI_API_KEY_ARG" ]]; then
+  export OPENAI_API_KEY="$OPENAI_API_KEY_ARG"
+elif [[ -z "${OPENAI_API_KEY:-}" ]]; then
+  die "OpenAI API key required. Pass --openai_api_key or set OPENAI_API_KEY env var."
+fi
+
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR"
@@ -165,7 +179,7 @@ echo "==> Target folder determined from stage1-1 stdout: $target_dir_abs"
 EXEC_LOG="$target_dir_abs/execution_log.txt"
 {
   echo "# Execution log (commands printed by run_pipeline.sh after target dir was determined)"
-  echo "# Generated: $(date -Is)"
+  echo "# Generated: $(date '+%Y-%m-%dT%H:%M:%S')"
   echo "# Target dir: $target_dir_abs"
   echo
 } >> "$EXEC_LOG"
@@ -174,23 +188,25 @@ echo "==> Writing reproducibility command: $target_dir_abs/command.txt"
 script_abs="$SCRIPT_DIR/$(basename "${BASH_SOURCE[0]}")"
 {
   echo "# Reproducibility command"
-  echo "# Generated: $(date -Is)"
+  echo "# Generated: $(date '+%Y-%m-%dT%H:%M:%S')"
   echo "# Original working dir: $ORIG_PWD"
   printf "%q " "$script_abs" "${ORIG_ARGS[@]}"
   echo
 } > "$target_dir_abs/command.txt"
 
 echo "==> [1-2] Stage1-2: find *_prepared.jsonl in target folder and run completion"
-mapfile -t prepared_files < <(find "$target_dir_abs" -maxdepth 1 -type f -name "*_prepared.jsonl" | sort)
+prepared_files=()
+while IFS= read -r f; do prepared_files+=("$f"); done < <(find "$target_dir_abs" -maxdepth 1 -type f -name "*_prepared.jsonl" | sort)
 [[ ${#prepared_files[@]} -gt 0 ]] || die "No *_prepared.jsonl found in $target_dir_abs"
 
 for pf in "${prepared_files[@]}"; do
   echo "----> Completing: $pf"
-  run_cmd bash step1.2_completion.sh "$pf" "$MODEL_PATH" "$ENGINE" "1.2" "$START_VLLM_SERVICE"
+  run_cmd bash step1.2_completion.sh "$pf" "$MODEL_NAME" "$ENGINE" "1.2" "$START_VLLM_SERVICE"
 done
 
 echo "==> [1-3] Stage1-3: find *_results.jsonl in target folder and process"
-mapfile -t results_files < <(find "$target_dir_abs" -maxdepth 1 -type f -name "*_results.jsonl" | sort)
+results_files=()
+while IFS= read -r f; do results_files+=("$f"); done < <(find "$target_dir_abs" -maxdepth 1 -type f -name "*_results.jsonl" | sort)
 [[ ${#results_files[@]} -gt 0 ]] || die "No *_results.jsonl found in $target_dir_abs (did stage1-2 run successfully?)"
 
 for rf in "${results_files[@]}"; do
@@ -202,7 +218,8 @@ echo "==> [convert2query] Find *_4prepared.jsonl under processed/ and convert to
 processed_dir="$target_dir_abs/processed"
 [[ -d "$processed_dir" ]] || die "Missing processed dir: $processed_dir (did stage1-3 run successfully?)"
 
-mapfile -t preview_files < <(find "$processed_dir" -maxdepth 1 -type f -name "ToolUse_*_4prepared.jsonl" | sort)
+preview_files=()
+while IFS= read -r f; do preview_files+=("$f"); done < <(find "$processed_dir" -maxdepth 1 -type f -name "ToolUse_*_4prepared.jsonl" | sort)
 [[ ${#preview_files[@]} -gt 0 ]] || die "No ToolUse_*_4prepared.jsonl found in $processed_dir"
 
 if [[ ${#preview_files[@]} -gt 1 ]]; then

@@ -416,6 +416,7 @@ GLOBAL_CACHE_INDEX: Optional[CacheIndex] = None
 
 def main() -> None:
     args = get_args()
+    os.makedirs(args.cache_dir, exist_ok=True)
     global GLOBAL_CACHE_INDEX
     GLOBAL_CACHE_INDEX = CacheIndex(args.cache_dir)
     inputs: List[str] = []

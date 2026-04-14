@@ -20,8 +20,6 @@ from utils import load_dataset_from_file, save_dataset, make_api_request_with_re
 # from transformers import AutoTokenizer, AutoModelForCausalLM
 from openai import OpenAI, RateLimitError
 
-from genos import INTUIT_AUTHN_HEADERS, BASE_URL_PER_ENV
-
 ################
 # Configurations
 ################
@@ -244,7 +242,6 @@ def process_helper(item, client):
             temperature=args.temperature,
             max_tokens=args.max_tokens,
             top_p=args.top_p,
-            extra_headers=INTUIT_AUTHN_HEADERS,
         )
         response = completion.choices[0].message.content
         item['messages'] = message + [
@@ -382,8 +379,17 @@ def main():
     elif "Devestral-Small" in args.model_path and args.engine in ["hf", "vllm"]:
         raise ValueError("Please use vllm_api engine for Devestral-Small.")
     
+    # Validate OpenAI API key
+    if args.engine == "openai":
+        if not args.openai_api_key:
+            # Try to get from environment variable
+            openai_api_key = os.getenv("OPENAI_API_KEY")
+            if openai_api_key:
+                args.openai_api_key = openai_api_key
+            else:
+                raise ValueError("OpenAI API key required. Pass --openai_api_key or set OPENAI_API_KEY env var.")
     # Validate OpenRouter API key
-    if args.engine == "openrouter_api":
+    elif args.engine == "openrouter_api":
         if not args.openrouter_api_key:
             # Try to get from environment variable
             openrouter_api_key = os.getenv("OPENROUTER_API_KEY")
@@ -457,11 +463,10 @@ def main():
         tokenizer = AutoTokenizer.from_pretrained(args.model_path)
     elif args.engine == "openai":
         print("Start OpenAI GPT engine...")
-        # openai_api_key = args.openai_api_key if args.openai_api_key else os.getenv("OPENAI_API_KEY")
-        # if not openai_api_key:
-        #     raise ValueError("OpenAI API Key not provided. Please set OPENAI_API_KEY environment variable or provide --openai_api_key argument.")
-        llm = OpenAI(base_url=BASE_URL_PER_ENV["E2E"].format(intuit_genos_model_id=args.model_path), api_key="xxx")
-        llm.extra_headers = INTUIT_AUTHN_HEADERS
+        openai_api_key = args.openai_api_key if args.openai_api_key else os.getenv("OPENAI_API_KEY")
+        if not openai_api_key:
+            raise ValueError("OpenAI API key required. Pass --openai_api_key or set OPENAI_API_KEY env var.")
+        llm = OpenAI(api_key=openai_api_key)
         params = None
         tokenizer = None
     elif args.engine == "openrouter_api":
