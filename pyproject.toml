@@ -29,7 +29,8 @@ dependencies = [
     "mistral-common>=1.7.0",
     "wrapt-timeout-decorator>=1.5.1",
     "blobfile>=3.0.0",
+    "cupy-cuda12x>=13.6.0 ; sys_platform != 'darwin'",
+    "flash-attn>=2.8.0.post2 ; sys_platform != 'darwin'",
+    "vllm>=0.9.1 ; sys_platform != 'darwin'",
+    "xformers>=0.0.32.post1 ; sys_platform != 'darwin'",
 ]
-# GPU-only dependencies (not installable on macOS):
-# "flash-attn>=2.8.0.post2"
-# "vllm>=0.9.1"
